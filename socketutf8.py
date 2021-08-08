@@ -8,9 +8,14 @@ Based on 'python-protobuf-simple-socket-rpc'.
 Code: https://github.com/exante/python-protobuf-simple-socket-rpc/blob/master/src/protobuf_simple_socket_rpc/socket_rpc.py
 
 Also used struct packing pattern from: https://stackoverflow.com/questions/2038083/how-to-use-python-and-googles-protocol-buffers-to-deserialize-data-sent-over-tc
+
+Future:
+    - support types: utf8, binary
+    - support gzip/gunzip with a flag in the struct
 '''
 import socket
 import struct
+import zlib
 
 class SocketUtf8(socket.socket):
     ''' better socket implementation
@@ -28,20 +33,22 @@ class SocketUtf8(socket.socket):
     # TODO: also add type and compression type (gzip or none) headers
     # TODO: for this class this can just wrap the parent method
     # TODO: why not have a more generic extension with types rather than cut-to-fit for utf8?
-    def utf8_recv(self) -> str:
+    def struct_recv(self) -> str:
+        ''' Receive some more structured data
         '''
-        '''
-        #type = self.read(1)
-        size = struct.unpack("H", self.recv(2))[0]
-        print("Size: {}".format(size))
+        compression, size = struct.unpack("=cH", self.recv(3))
         data = self.recv(size)
+        if compression == b'1':
+            data = zlib.decompress(data)
         return data.decode('utf8')
 
-    def utf8_send(self, data: str) -> None:
+    def struct_send(self, data: str, compression: bytes = b'1') -> None:
         '''
         '''
         data = data.encode('utf-8')
-        self.sendall(struct.pack("H", len(data)))
+        if compression == b'1':
+            data = zlib.compress(data)
+        self.sendall(struct.pack("=cH", compression, len(data)))
         self.sendall(data)
         return
 

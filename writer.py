@@ -17,7 +17,7 @@ if __name__ == '__main__':
     print("Sending json...")
     # this should take a string and convert it to bytes
     some_utf8_string = json.dumps({"hello world": [1,2,3]})
-    s.utf8_send(some_utf8_string)
+    s.struct_send(some_utf8_string)
     print("Sent json, closing...")
     s.close()
     print("Exiting gracefully...")
