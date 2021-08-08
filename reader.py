@@ -1,12 +1,38 @@
+import selectors
 import socket
 import threading
 
 import socketutf8
 
-def manage_clientsocket(clientsocket, addr):
-    print("Connection accepted from: {}".format(addr))
-    with clientsocket:
-        print(clientsocket.struct_recv().decode('utf-8'))
+class Server(threading.Thread):
+
+    def __init__(self, clientsocket, addr, *args, **kwargs):
+        self.sock = clientsocket
+        self.addr = addr
+        self.server_running = True
+        super().__init__(*args, **kwargs)
+
+    def run(self):
+        sel = selectors.DefaultSelector()
+        sel.register(self.sock, selectors.EVENT_READ, self.handle_connection)
+        while self.server_running:
+            events = sel.select(timeout=1)
+            for key, mask in events:
+                callback = key.data
+                #callback(key.fileobj, mask)
+                callback()
+
+    def handle_connection(self):
+        print("accept {} from: {}".format(self.sock, self.addr))
+        #print(self.sock.struct_recv().decode('utf-8'))
+        res = self.sock.struct_recv().decode('utf-8')
+        if res == 0:
+            return
+        else:
+            print(res)
+
+    def stop(self):
+        self.server_running = False
 
 
 if __name__ == '__main__':
@@ -17,15 +43,17 @@ if __name__ == '__main__':
     # consider a helper or default
     #sj = socketjson.SocketJson(socket.AF_INET, socket.SOCK_STREAM)
     s = socketutf8.SocketUtf8()
-
-    print("reader binding...")
     s.bind(conn)
-    print("reader listening...")
+    print("Listening...")
     s.listen(5) # "listen to 5 hosts should be plenty", sockets are disposable
+
+    # potentially use Semaphore to handle threads = hosts... depends on socket impl
     while True:
         clientsocket, addr = s.accept()
-        t = threading.Thread(target=manage_clientsocket, args=(clientsocket, addr))
-        t.start()
+        clientsocket.setblocking(False)
+        server = Server(clientsocket, addr)
+        # this thread needs to receive shutdown Event (not daemon so it cleans up)
+        server.start()
 
     # use a contextmanager instead
     s.close()

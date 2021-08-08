@@ -14,6 +14,7 @@ if __name__ == '__main__':
 
     print("writer connecting...")
     s.connect(conn)
+    s.setblocking(False)
 
     print("Sending json...")
     # this should take a string and convert it to bytes

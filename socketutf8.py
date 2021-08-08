@@ -22,8 +22,11 @@ class SocketUtf8(socket.socket):
 
     # TODO: also add type to struct (utf8, bytes, json, ?)
     def struct_recv(self) -> str:
+        # recv needs to be in a loop until returns 0, data can be partial
         compression, size = struct.unpack("=BH", self.recv(3))
+        # recv needs to be in a loop until returns 0, data can be partial
         data = self.recv(size)
+        self.close()
         if compression == 1:
             data = zlib.decompress(data)
         return data
@@ -33,7 +36,9 @@ class SocketUtf8(socket.socket):
         '''
         if compression == 1:
             data = zlib.compress(data)
+        # do we need a loop for sendall? how do we flush it?
         self.sendall(struct.pack("=BH", compression, len(data)))
+        # do we need a loop for sendall? how do we flush it?
         self.sendall(data)
         return
 
