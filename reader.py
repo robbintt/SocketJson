@@ -10,13 +10,13 @@ class Server(threading.Thread):
         self.sock = clientsocket
         self.addr = addr
         self.server_running = True
+        self.sel = selectors.DefaultSelector()
         super().__init__(*args, **kwargs)
 
     def run(self):
-        sel = selectors.DefaultSelector()
-        sel.register(self.sock, selectors.EVENT_READ, self.handle_connection)
+        self.sel.register(self.sock, selectors.EVENT_READ, self.handle_connection)
         while self.server_running:
-            events = sel.select(timeout=1)
+            events = self.sel.select(timeout=1)
             for key, mask in events:
                 callback = key.data
                 #callback(key.fileobj, mask)
@@ -30,6 +30,8 @@ class Server(threading.Thread):
             return
         else:
             print(res)
+        self.sel.unregister(self.sock)
+        self.sock.close()
 
     def stop(self):
         self.server_running = False
@@ -50,6 +52,7 @@ if __name__ == '__main__':
     # potentially use Semaphore to handle threads = hosts... depends on socket impl
     while True:
         clientsocket, addr = s.accept()
+        # This is used in conjunction with selector to handle 
         clientsocket.setblocking(False)
         server = Server(clientsocket, addr)
         # this thread needs to receive shutdown Event (not daemon so it cleans up)

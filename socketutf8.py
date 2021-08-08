@@ -26,7 +26,6 @@ class SocketUtf8(socket.socket):
         compression, size = struct.unpack("=BH", self.recv(3))
         # recv needs to be in a loop until returns 0, data can be partial
         data = self.recv(size)
-        self.close()
         if compression == 1:
             data = zlib.decompress(data)
         return data
