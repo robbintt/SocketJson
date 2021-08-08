@@ -40,12 +40,11 @@ class SocketUtf8(socket.socket):
         data = self.recv(size)
         if compression == b'1':
             data = zlib.decompress(data)
-        return data.decode('utf8')
+        return data
 
     def struct_send(self, data: str, compression: bytes = b'1') -> None:
         '''
         '''
-        data = data.encode('utf-8')
         if compression == b'1':
             data = zlib.compress(data)
         self.sendall(struct.pack("=cH", compression, len(data)))

@@ -16,6 +16,6 @@ if __name__ == '__main__':
     s.listen()
     conn, addr = s.accept()
     with conn:
-        print(conn.struct_recv())
+        print(conn.struct_recv().decode('utf-8'))
 
     s.close()
