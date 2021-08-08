@@ -52,6 +52,25 @@ class Server(threading.Thread):
         self.server_running = False
 
 
+def accept(sock, mask):
+    # sock already SocketUtf8 type, will work fine
+    conn, addr = sock.accept()  # Should be ready
+    print('accepted', conn, 'from', addr)
+    conn.setblocking(False)
+    sel.register(conn, selectors.EVENT_READ, read)
+
+def read(conn, mask):
+
+    res = conn.struct_recv().decode('utf-8')
+    message = "Result received, length {}".format(len(res)) + "\n"
+    print(message)
+    resfile = "results.txt"
+    with open(resfile, 'a') as f:
+        f.write(message)
+    sel.unregister(conn) # why not after close for better atomicity?
+    conn.close()
+
+
 if __name__ == '__main__':
     #HOST = 'localhost'
     HOST = socket.gethostname() # for server
@@ -63,11 +82,19 @@ if __name__ == '__main__':
     s.bind(conn)
     print("Listening...")
     s.listen(5) # "listen to 5 hosts should be plenty", sockets are disposable
+    s.setblocking(False)
 
-    # potentially use Semaphore to handle threads = hosts... depends on socket impl
-    # TODO: Seems like I need a sempahore for available system files...
-    # I don't love semaphore for that, feels like I should just timeout...
+    sel = selectors.DefaultSelector()
+    # not even using Server thread in this context
+    sel.register(s, selectors.EVENT_READ, accept)
+
     while True:
+        events = sel.select()
+        for key, mask in events:
+            callback = key.data
+            callback(key.fileobj, mask)
+
+    '''
         try:
             clientsocket, addr = s.accept()
             # This is used in conjunction with selector to handle
@@ -82,3 +109,4 @@ if __name__ == '__main__':
 
     # use a contextmanager instead
     s.close()
+    '''

@@ -4,8 +4,10 @@ Future:
     - support types: utf8, binary
     - support gzip/gunzip with a flag in the struct
 '''
+import os
 import socket
 import struct
+import time
 import zlib
 
 class SocketUtf8(socket.socket):
@@ -14,6 +16,8 @@ class SocketUtf8(socket.socket):
     def __init__(self, *args: int, **kwargs: int) -> None:
         '''
         '''
+        self._original_conn = None
+        self.fd = None
         # default to INET STREAM
         # I think this is only a a STREAM class but not sure yet
         if not args:
@@ -22,20 +26,66 @@ class SocketUtf8(socket.socket):
 
     # TODO: also add type to struct (utf8, bytes, json, ?)
     def struct_recv(self) -> str:
-        # recv needs to be in a loop until returns 0, data can be partial
-        compression, size = struct.unpack("=BH", self.recv(3))
-        # recv needs to be in a loop until returns 0, data can be partial
-        data = self.recv(size)
+
+        # recv needs to be in a loop until returns 0, data could be partial
+        # TODO: Clean up data structures, dry out
+        desc_size = 3
+        desc = bytes()
+        _desc = bytes()
+        remaining_bytes = desc_size - len(desc)
+        while not _desc and remaining_bytes:
+            try:
+                _desc = self.recv(remaining_bytes)
+            except BlockingIOError:
+                time.sleep(0.001)
+        desc += _desc
+        remaining_bytes = desc_size - len(desc)
+        print(remaining_bytes)
+        while remaining_bytes > 0:
+            try:
+                _desc = self.recv(remaining_bytes)
+            except BlockingIOError:
+                time.sleep(0.001)
+                continue # reset loop
+            desc += _desc
+            remaining_bytes = desc_size - len(desc)
+        compression, size = struct.unpack("=BH", desc)
+        print("Received size: {}".format(size))
+
+        # recv needs to be in a loop until returns 0, data could be partial
+        # TODO: Clean up data structures, dry out
+        data = bytes()
+        _data = bytes()
+        remaining_bytes = size - len(data)
+        while not _data and remaining_bytes:
+            try:
+                _data = self.recv(remaining_bytes)
+            except BlockingIOError:
+                time.sleep(0.001)
+        data += _data
+        remaining_bytes = size - len(data)
+        print(len(data), remaining_bytes)
+        print(remaining_bytes)
+        while remaining_bytes > 0:
+            try:
+                _data = self.recv(remaining_bytes)
+            except BlockingIOError:
+                time.sleep(0.001)
+                continue # reset loop
+            data += _data
+            remaining_bytes = size - len(data)
+
         if compression == 1:
             data = zlib.decompress(data)
         return data
 
-    def struct_send(self, data: str, compression: bytes = 1) -> None:
+    def struct_send(self, data: bytes, compression: int = 1) -> None:
         '''
         '''
         if compression == 1:
             data = zlib.compress(data)
         # do we need a loop for sendall? how do we flush it?
+        print("data length: {}".format(len(data)))
         self.sendall(struct.pack("=BH", compression, len(data)))
         # do we need a loop for sendall? how do we flush it?
         self.sendall(data)
@@ -56,11 +106,12 @@ class SocketUtf8(socket.socket):
             p += _size_boundary
         return
 
-    @classmethod
-    def _socket_copy_with_inheritance(cls, sock):
-        _fd = socket.dup(sock.fileno())
-        _copy = cls(sock.family, sock.type, sock.proto, fileno=_fd)
+    def _socket_copy_with_inheritance(self, sock):
+        self.fd = socket.dup(sock.fileno())
+        print("fd: {}".format(self.fd))
+        _copy = SocketUtf8(sock.family, sock.type, sock.proto, fileno=self.fd)
         _copy.settimeout(sock.gettimeout())
+        sock.close()
         return _copy
 
     def accept(self, *args, **kwargs):
@@ -68,5 +119,14 @@ class SocketUtf8(socket.socket):
 
         From: https://stackoverflow.com/a/45209878
         '''
-        _conn, addr = super().accept(*args, **kwargs)
-        return self._socket_copy_with_inheritance(_conn), addr
+        self._original_conn, addr = super().accept(*args, **kwargs)
+        return self._socket_copy_with_inheritance(self._original_conn), addr
+        # don't fix my problem with fd cleanup
+        self._original_conn.close()
+        del(self._original_conn)
+
+    def close(self, *args, **kwargs):
+        #print("closing fd: {}".format(self.fd))
+        #os.close(self.fd)
+        #self._original_conn.close()
+        super().close(*args, **kwargs)
