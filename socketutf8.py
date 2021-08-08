@@ -20,20 +20,20 @@ class SocketUtf8(socket.socket):
             args = (socket.AF_INET, socket.SOCK_STREAM)
         super().__init__(*args, **kwargs)
 
-    # TODO: also add type to struct (binary, utf8, bytes, json?)
+    # TODO: also add type to struct (utf8, bytes, json, ?)
     def struct_recv(self) -> str:
-        compression, size = struct.unpack("=cH", self.recv(3))
+        compression, size = struct.unpack("=BH", self.recv(3))
         data = self.recv(size)
-        if compression == b'1':
+        if compression == 1:
             data = zlib.decompress(data)
         return data
 
-    def struct_send(self, data: str, compression: bytes = b'1') -> None:
+    def struct_send(self, data: str, compression: bytes = 1) -> None:
         '''
         '''
-        if compression == b'1':
+        if compression == 1:
             data = zlib.compress(data)
-        self.sendall(struct.pack("=cH", compression, len(data)))
+        self.sendall(struct.pack("=BH", compression, len(data)))
         self.sendall(data)
         return
 
