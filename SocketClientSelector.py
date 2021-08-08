@@ -1,7 +1,9 @@
 import json
+import math
 import selectors
 import socket
 import threading
+import queue
 
 import socketutf8
 
@@ -16,37 +18,48 @@ class Client(threading.Thread):
         self.sel = selectors.DefaultSelector()
         self.conn = conn
         self.sock = socketutf8.SocketUtf8()
+        self.work = queue.Queue()
         super().__init__(*args, **kwargs)
 
+    def _reset_socket(self):
+        del self.sock
+        self.sock = socketutf8.SocketUtf8()
 
     def run(self):
 
-        print("writer connecting...")
-        try:
-            self.sock.connect(self.conn)
-            self.sock.setblocking(False)
-            # how does DefaultSelector interact with other selectors? It's at the system level, how? (see lpi book p 1330)
-            # but 1 selector per thread also seems strange. trying selector as class variable
-            self.sel.register(self.sock, selectors.EVENT_WRITE, self.writesock)
-        except ConnectionRefusedError:
-            print("Connection refused... giving up.")
-            raise
-        except socket.gaierror:
-            print("Connection refused... giving up.")
-            raise
-        except IOError:
-            print("Write refused... giving up.")
-            raise
-        except Exception:
-            print("Not sure what happend... giving up.")
-            raise
-
         while True:
-            events = self.sel.select()
-            for key, mask in events:
-                callback = key.data
-                callback(key.fileobj, mask)
-                return # we only handle one selector per thread, investigate other control flows here
+            w = self.work.get()
+            print("Thread got some work: {}".format(w))
+            print("writer connecting...")
+            try:
+                self.sock.connect(self.conn)
+                self.sock.setblocking(False)
+                # how does DefaultSelector interact with other selectors? It's at the system level, how? (see lpi book p 1330)
+                # but 1 selector per thread also seems strange. trying selector as class variable
+                self.sel.register(self.sock, selectors.EVENT_WRITE, self.writesock)
+            except ConnectionRefusedError:
+                print("Connection refused... giving up.")
+                raise
+            except socket.gaierror:
+                print("Connection refused... giving up.")
+                raise
+            except IOError:
+                print("Write refused... giving up.")
+                raise
+            except Exception:
+                print("Not sure what happend... giving up.")
+                raise
+
+            while self.sock:
+                print("Socket still active...")
+                events = self.sel.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
+            # an atomic finally: this is executed when we hit the loop exit normally
+            else:
+                print("Resetting socket!")
+                self._reset_socket()
 
     def writesock(self, _, __):
         ''' not sure how to use key.fileobj and mask in this context yet, maybe useless
@@ -59,15 +72,32 @@ class Client(threading.Thread):
         try:
             self.sock.struct_send(data.encode('utf-8'), compression=0)
         except OSError:
-            client.sel.unregister(self.sock)
+            self.sel.unregister(self.sock)
             print("Too many open files... raising to parent")
             raise
 
         # add context manager
         print("Exiting gracefully...")
-        self.sel.unregister(self.sock) # maybe after closing the socket to keep count correctly?
         self.sock.close()
-        print("Socket closed.")
+        print("Socket closed: {}".format(self.sock))
+        self.sel.unregister(self.sock) # maybe after closing the socket to keep count correctly?
+        self.sock = None
+
+def create_threadpool(ThreadClass, size, *args, **kwargs):
+    pool = list()
+    while size > 0:
+        pool.append(ThreadClass(*args, **kwargs))
+        size -= 1
+    return pool
+
+def start_threadpool(pool):
+    for t in pool:
+        t.start()
+
+def show_remaining_work_in_threadpool(pool):
+    for _thread in pool:
+        print(_thread, _thread.work.qsize())
+
 
 if __name__ == '__main__':
     import time
@@ -76,7 +106,39 @@ if __name__ == '__main__':
     HOST = socket.gethostname()
     PORT = 8080
     conn = (HOST, PORT)
+    work_count = 10000
 
+    # now it's time to build a thread pool, and each thread can have a selector pool and work on each of its fds
+    system_fds = 250
+    size = int(math.floor(system_fds/10)) # around 10 selectors per thread
+    threadpool = create_threadpool(Client, size, conn)
+    print("Threadpool size: {}".format(len(threadpool)))
+
+    # dummy work for now
+    work = list(range(work_count)) # the contents of work don't matter yet, but the send data could go here... it's currently in the Client thread as things evolved.
+
+    # distribute work evenly
+    for i, w in enumerate(work):
+        # modulo by length of threadpool to distribute work
+        threadpool[i%len(threadpool)].work.put(w)
+
+    start_threadpool(threadpool)
+    #print("Active threads: {}".format(len(threading.enumerate())))
+    #exit(0)
+
+    while threadpool:
+        time.sleep(1)
+        print("Active threads: {}".format(len(threading.enumerate())))
+        show_remaining_work_in_threadpool(threadpool)
+        for i, _thread in enumerate(threadpool):
+            if _thread.work.empty():
+                del threadpool[i]
+
+    print("Thread pool drained and work is complete.")
+
+
+
+    '''
     c = 0
     total = 10000
     num_conn = 0
@@ -110,3 +172,4 @@ if __name__ == '__main__':
             c += 1
             num_conn -= 1
     print("{} socket connections successfully written.".format(num_conn))
+    '''
