@@ -1,5 +1,3 @@
-'''
-'''
 import socketutf8
 
 if __name__ == '__main__':
@@ -15,6 +13,7 @@ if __name__ == '__main__':
     print("reader listening...")
     s.listen()
     conn, addr = s.accept()
+    print("Connection accepted from: {}".format(addr))
     with conn:
         print(conn.struct_recv().decode('utf-8'))
 
