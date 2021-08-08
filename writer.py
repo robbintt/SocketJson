@@ -1,9 +1,12 @@
-import socketutf8
 import json
+import socket
+
+import socketutf8
 
 if __name__ == '__main__':
 
-    HOST = 'localhost'
+    HOST = '127.0.0.1'
+    HOST = socket.gethostname()
     PORT = 8080
     conn = (HOST, PORT)
     # consider a helper
