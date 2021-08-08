@@ -1,22 +1,21 @@
 '''
 '''
-import socketjson
-import socket
+import socketutf8
 
 if __name__ == '__main__':
     HOST = 'localhost'
     PORT = 8080
     conn = (HOST, PORT)
-    # consider a helper
+    # consider a helper or default
     #sj = socketjson.SocketJson(socket.AF_INET, socket.SOCK_STREAM)
-    sj = socketjson.SocketJson()
+    s = socketutf8.SocketUtf8()
 
     print("reader binding...")
-    sj.bind(conn)
+    s.bind(conn)
     print("reader listening...")
-    sj.listen()
-    conn, addr = sj.accept()
+    s.listen()
+    conn, addr = s.accept()
     with conn:
         print(conn.utf8_recv())
 
-    sj.close()
+    s.close()

@@ -1,5 +1,4 @@
-''' Simple json socket object
-There's not much json specific about this.  We're really just receiving utf-8. The json stuff should be handled in some helpers. Is there any reason to have this class?
+''' Simple socket object
 
 Problem: s.accept() does not return a socket of the class of parent socket...
 S.O answer: https://stackoverflow.com/questions/45207430/extending-socket-socket-with-a-new-attribute
@@ -13,8 +12,8 @@ Also used struct packing pattern from: https://stackoverflow.com/questions/20380
 import socket
 import struct
 
-class SocketJson(socket.socket):
-    ''' socket json implementation
+class SocketUtf8(socket.socket):
+    ''' better socket implementation
     '''
     def __init__(self, *args: int, **kwargs: int) -> None:
         '''
@@ -46,6 +45,21 @@ class SocketJson(socket.socket):
         self.sendall(data)
         return
 
+    def utf8_multipart_send(self, data: str) -> None:
+        ''' Not tested
+        '''
+        maxlen = 65535 # size of "H" type: short
+        # multipart send
+        p = 0
+        while p < len(data):
+            _size_boundary = min(len(data), p+maxlen)
+            _part = data[p, _size_boundary]
+            _part = _part.encode('utf-8')
+            self.sendall(struct.pack("H", len(_part)))
+            self.sendall(_part)
+            p += _size_boundary
+        return
+
     @classmethod
     def _socket_copy_with_inheritance(cls, sock):
         _fd = socket.dup(sock.fileno())
@@ -54,7 +68,7 @@ class SocketJson(socket.socket):
         return _copy
 
     def accept(self, *args, **kwargs):
-        ''' Replace the python default socket instance with a SocketJson instance
+        ''' Copy the python3 lib socket fd over to one descended from this class
 
         From: https://stackoverflow.com/a/45209878
         '''
