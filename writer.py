@@ -2,6 +2,7 @@
 '''
 import socketjson
 import socket
+import json
 
 if __name__ == '__main__':
 
@@ -15,7 +16,9 @@ if __name__ == '__main__':
     sj.connect(conn)
 
     print("Sending json...")
-    sj.json_send(b'hello world')
+    # this should take a string and convert it to bytes
+    some_utf8_string = json.dumps({"hello world": [1,2,3]})
+    sj.utf8_send(some_utf8_string)
     print("Sent json, closing...")
     sj.close()
     print("Exiting gracefully...")

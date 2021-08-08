@@ -1,4 +1,5 @@
 ''' Simple json socket object
+There's not much json specific about this.  We're really just receiving utf-8. The json stuff should be handled in some helpers. Is there any reason to have this class?
 
 Problem: s.accept() does not return a socket of the class of parent socket...
 S.O answer: https://stackoverflow.com/questions/45207430/extending-socket-socket-with-a-new-attribute
@@ -9,7 +10,6 @@ Code: https://github.com/exante/python-protobuf-simple-socket-rpc/blob/master/sr
 
 Also used struct packing pattern from: https://stackoverflow.com/questions/2038083/how-to-use-python-and-googles-protocol-buffers-to-deserialize-data-sent-over-tc
 '''
-import json
 import socket
 import struct
 
@@ -20,23 +20,28 @@ class SocketJson(socket.socket):
         '''
         '''
         # similar invocation to super in this context
-        self = socket.socket.__init__(self, *args, **kwargs)
-        # alternative super implementation
-        # super().__init__(*args, **kwargs)
+        if not args:
+            args = (socket.AF_INET, socket.SOCK_STREAM)
+        super().__init__(*args, **kwargs)
+        # alternative to super implementation
+        #self = socket.socket.__init__(self, *args, **kwargs)
 
-    # todo: also add type and compression type (gzip or none) headers
-    def json_recv(self) -> bytes:
+    # TODO: also add type and compression type (gzip or none) headers
+    # TODO: for this class this can just wrap the parent method
+    # TODO: why not have a more generic extension with types rather than cut-to-fit for utf8?
+    def utf8_recv(self) -> str:
         '''
         '''
         #type = self.read(1)
         size = struct.unpack("H", self.recv(2))[0]
+        print("Size: {}".format(size))
         data = self.recv(size)
-        return data # TODO: handle jsonify from bytes in return
+        return data.decode('utf8')
 
-    # TODO: When does the data go from json to bytes?
-    def json_send(self, data: bytes) -> None:
+    def utf8_send(self, data: str) -> None:
         '''
         '''
+        data = data.encode('utf-8')
         self.sendall(struct.pack("H", len(data)))
         self.sendall(data)
         return
