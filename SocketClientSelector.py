@@ -11,6 +11,12 @@ import socketutf8
 
 class Client(threading.Thread):
     ''' Manage a socket connection
+
+    On huge amounts of connections, I still leak very few results.
+
+    FUTURE:
+    - Resiliency: Guarantee "at least once".
+
     '''
 
     def __init__(self, conn, *args, **kwargs):
@@ -18,45 +24,67 @@ class Client(threading.Thread):
         '''
         self.sel = selectors.DefaultSelector()
         self.conn = conn
+        socket.setdefaulttimeout(10)
         self.sock = socketutf8.SocketUtf8()
         self.work = queue.Queue()
         self.w = None # current job
+        self.TIMEOUT = 3
         super().__init__(*args, **kwargs)
 
     def _reset_socket(self):
+        try:
+            self.sel.unregister(self.sock)
+        except (KeyError, ValueError):
+            pass # it wasn't registered
+        if self.sock:
+            self.sock.close()
         self.sock = socketutf8.SocketUtf8()
 
-    def run(self):
+    def _connect_socket(self):
+        self.sock.connect(self.conn)
+        self.sock.setblocking(False)
+        self.sel.register(self.sock, selectors.EVENT_WRITE, self.writesock)
 
+    def run(self):
         while not self.work.empty() or self.w:
             if not self.w:
                 self.w = self.work.get()
                 #print("Thread {} got some work: {}".format(self, self.w))
             #print("writer connecting...")
             try:
-                self.sock.connect(self.conn)
-                self.sock.setblocking(False)
-                # how does DefaultSelector interact with other selectors? It's at the system level, how? (see lpi book p 1330)
-                # but 1 selector per thread also seems strange. trying selector as class variable
-                self.sel.register(self.sock, selectors.EVENT_WRITE, self.writesock)
-            except ConnectionRefusedError:
-                print("Connection refused... continuing....")
-            except socket.gaierror:
-                print("Connection refused... continuing....")
-            except IOError:
-                print("Write refused... continuing....")
-            except Exception:
-                print("Not sure what happend... continuing....")
+                self._connect_socket()
+            except Exception as e:
+                print(sys.exc_info())
+                if type(e) is IOError:
+                    print("Write refused... continuing....")
+                elif type(e) is socket.gaierror:
+                    print("Connection refused... continuing....")
+                elif type(e) is ConnectionRefusedError:
+                    print("Connection refused... continuing....")
+                else:
+                    print("Not sure what happend... continuing....")
+                time.sleep(0.1) # temporary: might need exponential backoff elsewhere
+                self._reset_socket()
+                print("Resetting thread: {}".format(self))
+                continue
 
             while self.sock:
-                #print("Socket still active...")
-                events = self.sel.select()
-                for key, mask in events:
-                    callback = key.data
-                    callback(key.fileobj, mask)
-            # an atomic finally: this is executed when we hit the loop exit normally
+                try:
+                    #events = self.sel.select(timeout=self.TIMEOUT)
+                    events = self.sel.select()
+                    for key, mask in events:
+                        callback = key.data
+                        callback(key.fileobj, mask)
+                except Exception as e:
+                    print(sys.exc_info())
+                    # why not just reset socket here and break the parent loop?
+                    self._reset_socket()
+                    self._connect_socket()
+                    continue
+            # else is atomic: this is executed when we hit the loop exit normally
             else:
-                #print("Resetting socket!")
+                self.work.task_done()
+                self.w = None
                 self._reset_socket()
 
     def writesock(self, _, __):
@@ -66,9 +94,14 @@ class Client(threading.Thread):
         data = 'a' * (2**16 - 1)
         res = self.sock.struct_send(data.encode('utf-8'), compression=0)
         if res == -1:
-            print("Send failed: {} work: {}".format(self, self.w))
-            # Will this retry without putting it back on the stack?
-            self.work.put(self.w)
+            try:
+                raise Exception("Send failed: {} work: {}".format(self, self.w))
+            except:
+                print(sys.exc_info())
+                self._reset_socket()
+                self._connect_socket()
+                print("Resetting thread: {}".format(self))
+                return
 
         self.sel.unregister(self.sock) # maybe after closing the socket to keep count correctly?
         #print("Socket closing: {}".format(self.sock))
@@ -104,7 +137,7 @@ if __name__ == '__main__':
     # now it's time to build a thread pool, and each thread can have a selector pool and work on each of its fds
     system_fds = 250
     #size = int(math.floor(system_fds/10)) # around 10 selectors per thread
-    size = 20
+    size = 40
     threadpool = create_threadpool(Client, size, conn)
     print("Threadpool size: {}".format(len(threadpool)))
 

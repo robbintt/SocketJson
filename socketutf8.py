@@ -91,12 +91,7 @@ class SocketUtf8(socket.socket):
                 return -1
             except (BlockingIOError, Exception):
                 print(sys.exc_info())
-                time.sleep(0.001)
-                continue # reset loop
-                # need a timeout and let it be handled on client side
-                # TODO: do the following if timeout
-                #print(sys.exc_info())
-                #return -1
+                return -1
         while True:
             try:
                 self.sendall(data)
@@ -106,12 +101,7 @@ class SocketUtf8(socket.socket):
                 return -1
             except (BlockingIOError, Exception):
                 print(sys.exc_info())
-                time.sleep(0.001)
-                continue # reset loop
-                # need a timeout and let it be handled on client side
-                # TODO: do the following if timeout
-                #print(sys.exc_info())
-                #return -1
+                return -1
         return
 
     def utf8_multipart_send(self, data: str) -> None:
