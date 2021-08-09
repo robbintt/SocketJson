@@ -19,14 +19,14 @@ class Client(threading.Thread):
 
     '''
 
-    def __init__(self, conn, *args, **kwargs):
+    def __init__(self, conn, work, *args, **kwargs):
         '''
         '''
         self.sel = selectors.DefaultSelector()
         self.conn = conn
         socket.setdefaulttimeout(10)
         self.sock = socketutf8.SocketUtf8()
-        self.work = queue.Queue()
+        self.work = work
         self.w = None # current job
         self.TIMEOUT = 3
         super().__init__(*args, **kwargs)
@@ -48,7 +48,7 @@ class Client(threading.Thread):
     def run(self):
         while not self.work.empty() or self.w:
             if not self.w:
-                self.w = self.work.get()
+                self.w = self.work.get_nowait()
                 #print("Thread {} got some work: {}".format(self, self.w))
             #print("writer connecting...")
             try:
@@ -83,7 +83,6 @@ class Client(threading.Thread):
                     continue
             # else is atomic: this is executed when we hit the loop exit normally
             else:
-                self.work.task_done()
                 self.w = None
                 self._reset_socket()
 
@@ -137,34 +136,41 @@ if __name__ == '__main__':
     # now it's time to build a thread pool, and each thread can have a selector pool and work on each of its fds
     system_fds = 250
     #size = int(math.floor(system_fds/10)) # around 10 selectors per thread
-    size = 40
-    threadpool = create_threadpool(Client, size, conn)
+    size = 5
+    work = queue.Queue()
+    threadpool = create_threadpool(Client, size, conn, work)
     print("Threadpool size: {}".format(len(threadpool)))
 
     # dummy work for now
-    work = list(range(work_count)) # the contents of work don't matter yet, but the send data could go here... it's currently in the Client thread as things evolved.
+    dummy_work = list(range(work_count)) # the contents of work don't matter yet, but the send data could go here... it's currently in the Client thread as things evolved.
+    for w in dummy_work:
+        work.put(w)
 
+    '''
     # distribute work evenly
     for i, w in enumerate(work):
         # modulo by length of threadpool to distribute work
         threadpool[i%len(threadpool)].work.put(w)
+    '''
 
-    show_remaining_work_in_threadpool(threadpool)
+    #show_remaining_work_in_threadpool(threadpool)
     start_threadpool(threadpool)
 
-    while True:
-        try:
-            time.sleep(1)
-            print("Active threads: {}".format(len(threading.enumerate())))
-            show_remaining_work_in_threadpool(threadpool)
-            for _thread in threadpool:
-                if not _thread.work.empty() and thread.w == None:
-                    continue # pool still alive, skip else
-            else:
-                break
-        except Exception:
-            continue
+    while not work.empty():
+        time.sleep(1)
+        print("Active threads: {}".format(len(threading.enumerate())))
+        print("Remaining work: {}".format(work.qsize()))
+        '''
+        show_remaining_work_in_threadpool(threadpool)
+        for _thread in threadpool:
+            if not _thread.work.empty() and thread.w == None:
+                continue # pool still alive, skip else
+        else:
+            break
+        '''
 
+    '''
     print(len(threadpool))
     show_remaining_work_in_threadpool(threadpool)
+    '''
     print("Thread pool drained and work is complete.")
