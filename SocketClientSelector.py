@@ -104,7 +104,7 @@ if __name__ == '__main__':
     # now it's time to build a thread pool, and each thread can have a selector pool and work on each of its fds
     system_fds = 250
     #size = int(math.floor(system_fds/10)) # around 10 selectors per thread
-    size = 10
+    size = 20
     threadpool = create_threadpool(Client, size, conn)
     print("Threadpool size: {}".format(len(threadpool)))
 
@@ -135,39 +135,3 @@ if __name__ == '__main__':
     print(len(threadpool))
     show_remaining_work_in_threadpool(threadpool)
     print("Thread pool drained and work is complete.")
-
-    '''
-    c = 0
-    total = 10000
-    num_conn = 0
-    max_conn = 250
-    # also need to measure closed connections
-    while c < total and len(threading.enumerate()) > 0:
-        #time.sleep(0.01) # 100 qps works fine with no threading and selectors on server
-        #time.sleep(0.005) # 250 qps is fine with no threading and selectors on server
-        # i could timeit... to see real world
-        #time.sleep(0.0025) # 500 qps is fine with no threading and selectors on server
-        #time.sleep(0.001) #  WORKS with new server selectors only implementation... probably better to move servers to thread pool where threads = selectors/10 or something.
-        time.sleep(0.0005) # takes way longer than 0.0005 * 10000 = 5 seconds, more like 9.3 seconds. so we are at the cap for client selectors/threads=1 at 2000 qps
-        #time.sleep(0.0001) # does not work with new server selectors only and 1 selector/thread on client... also transaction leak? only 9388/10000 results accounted for this run...
-        try:
-            print("Attempt # {}".format(c))
-            print("Active threads: {}".format(len(threading.enumerate())))
-            if num_conn < max_conn:
-                num_conn += 1
-            else:
-                time.sleep(1)
-                raise Exception("Too many connections, recycling thread.")
-                continue
-            Client(conn).start()
-        except Exception:
-            num_conn -= 1
-            # thread will gc itself?
-            continue
-        finally:
-            # not perfect, but captures the idea.
-            # exceptions will sometimes succeed and then have an exception.
-            c += 1
-            num_conn -= 1
-    print("{} socket connections successfully written.".format(num_conn))
-    '''
