@@ -7,6 +7,7 @@ Future:
 import os
 import socket
 import struct
+import sys
 import time
 import zlib
 
@@ -84,11 +85,36 @@ class SocketUtf8(socket.socket):
         '''
         if compression == 1:
             data = zlib.compress(data)
-        # do we need a loop for sendall? how do we flush it?
-        print("data length: {}".format(len(data)))
-        self.sendall(struct.pack("=BH", compression, len(data)))
-        # do we need a loop for sendall? how do we flush it?
-        self.sendall(data)
+        while True:
+            try:
+                self.sendall(struct.pack("=BH", compression, len(data)))
+                break
+            except BrokenPipeError:
+                print(sys.exc_info())
+                return -1
+            except (BlockingIOError, Exception):
+                print(sys.exc_info())
+                time.sleep(0.001)
+                continue # reset loop
+                # need a timeout and let it be handled on client side
+                # TODO: do the following if timeout
+                #print(sys.exc_info())
+                #return -1
+        while True:
+            try:
+                self.sendall(data)
+                break
+            except BrokenPipeError:
+                print(sys.exc_info())
+                return -1
+            except (BlockingIOError, Exception):
+                print(sys.exc_info())
+                time.sleep(0.001)
+                continue # reset loop
+                # need a timeout and let it be handled on client side
+                # TODO: do the following if timeout
+                #print(sys.exc_info())
+                #return -1
         return
 
     def utf8_multipart_send(self, data: str) -> None:
