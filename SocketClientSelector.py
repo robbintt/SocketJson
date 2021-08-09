@@ -31,8 +31,8 @@ class Client(threading.Thread):
         while not self.work.empty() or self.w:
             if not self.w:
                 self.w = self.work.get()
-                print("Thread {} got some work: {}".format(self, self.w))
-            print("writer connecting...")
+                #print("Thread {} got some work: {}".format(self, self.w))
+            #print("writer connecting...")
             try:
                 self.sock.connect(self.conn)
                 self.sock.setblocking(False)
@@ -49,7 +49,7 @@ class Client(threading.Thread):
                 print("Not sure what happend... continuing....")
 
             while self.sock:
-                print("Socket still active...")
+                #print("Socket still active...")
                 events = self.sel.select()
                 for key, mask in events:
                     callback = key.data
@@ -104,7 +104,7 @@ if __name__ == '__main__':
     # now it's time to build a thread pool, and each thread can have a selector pool and work on each of its fds
     system_fds = 250
     #size = int(math.floor(system_fds/10)) # around 10 selectors per thread
-    size = 2
+    size = 10
     threadpool = create_threadpool(Client, size, conn)
     print("Threadpool size: {}".format(len(threadpool)))
 
@@ -120,16 +120,20 @@ if __name__ == '__main__':
     start_threadpool(threadpool)
 
     while True:
-        time.sleep(1)
-        print("Active threads: {}".format(len(threading.enumerate())))
-        show_remaining_work_in_threadpool(threadpool)
-        for _thread in threadpool:
-            if not _thread.work.empty():
-                continue # pool still alive, skip else
-        else:
-            break
+        try:
+            time.sleep(1)
+            print("Active threads: {}".format(len(threading.enumerate())))
+            show_remaining_work_in_threadpool(threadpool)
+            for _thread in threadpool:
+                if not _thread.work.empty() and thread.w == None:
+                    continue # pool still alive, skip else
+            else:
+                break
+        except Exception:
+            continue
 
     print(len(threadpool))
+    show_remaining_work_in_threadpool(threadpool)
     print("Thread pool drained and work is complete.")
 
     '''

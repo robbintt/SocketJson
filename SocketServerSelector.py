@@ -13,9 +13,11 @@ class Server(threading.Thread):
     '''
     sel = selectors.DefaultSelector()
     def __init__(self, clientsocket, addr, *args, **kwargs):
+        socket.setdefaulttimeout(10)
         self.sock = clientsocket
         self.addr = addr
         self.server_running = True
+        # TODO: not sure if needed
         self.TIMEOUT = 3  # avoid stale connections
         super().__init__(*args, **kwargs)
 
@@ -31,14 +33,12 @@ class Server(threading.Thread):
             except Exception:
                 self.stop()
 
-        print("Closing socket")
         self.sock.close()
         Server.sel.unregister(self.sock)
-        print("Socket closed")
         del(self)
 
     def handle_connection(self):
-        print("accept {} from: {}".format(self.sock, self.addr))
+        #print("accept {} from: {}".format(self.sock, self.addr))
         #print(self.sock.struct_recv().decode('utf-8'))
         res = self.sock.struct_recv().decode('utf-8')
         message = "Result received, length {}".format(len(res)) + "\n"
@@ -55,7 +55,7 @@ class Server(threading.Thread):
 def accept(sock, mask):
     # sock already SocketUtf8 type, will work fine
     conn, addr = sock.accept()  # Should be ready
-    print('accepted', conn, 'from', addr)
+    #print('accepted', conn, 'from', addr)
     conn.setblocking(False)
     sel.register(conn, selectors.EVENT_READ, read)
 

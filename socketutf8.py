@@ -41,7 +41,6 @@ class SocketUtf8(socket.socket):
                 time.sleep(0.001)
         desc += _desc
         remaining_bytes = desc_size - len(desc)
-        print(remaining_bytes)
         while remaining_bytes > 0:
             try:
                 _desc = self.recv(remaining_bytes)
@@ -51,7 +50,7 @@ class SocketUtf8(socket.socket):
             desc += _desc
             remaining_bytes = desc_size - len(desc)
         compression, size = struct.unpack("=BH", desc)
-        print("Received size: {}".format(size))
+        #print("Received size: {}".format(size))
 
         # recv needs to be in a loop until returns 0, data could be partial
         # TODO: Clean up data structures, dry out
@@ -65,8 +64,6 @@ class SocketUtf8(socket.socket):
                 time.sleep(0.001)
         data += _data
         remaining_bytes = size - len(data)
-        print(len(data), remaining_bytes)
-        print(remaining_bytes)
         while remaining_bytes > 0:
             try:
                 _data = self.recv(remaining_bytes)
@@ -134,7 +131,7 @@ class SocketUtf8(socket.socket):
 
     def _socket_copy_with_inheritance(self, sock):
         self.fd = socket.dup(sock.fileno())
-        print("fd: {}".format(self.fd))
+        #print("fd: {}".format(self.fd))
         _copy = SocketUtf8(sock.family, sock.type, sock.proto, fileno=self.fd)
         _copy.settimeout(sock.gettimeout())
         sock.close()
